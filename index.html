@@ -1,0 +1,324 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SD Photo Recovery</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;800&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+  /* Layout: a tool bench. Three-step strip on top, then a contact sheet of recovered frames. */
+  :root {
+    --bg: #eef1f3; --panel: #ffffff; --ink: #14202b; --muted: #5a6875; --line: #d3dae0;
+    --accent: #0a6b86; --accent-ink: #ffffff; --ok: #1d7a46; --warn: #a15c00;
+    --display: "Archivo", "Segoe UI", system-ui, sans-serif;
+    --body: "Archivo", "Segoe UI", system-ui, sans-serif;
+    --mono: "IBM Plex Mono", ui-monospace, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+    --bg: #0f1519; --panel: #172026; --ink: #e4ebf0; --muted: #93a3b0; --line: #2a3640;
+    --accent: #4fb8d6; --accent-ink: #07161c; --ok: #5cc98a; --warn: #e5a54a; color-scheme: dark } }
+  :root[data-theme="dark"] {
+    --bg: #0f1519; --panel: #172026; --ink: #e4ebf0; --muted: #93a3b0; --line: #2a3640;
+    --accent: #4fb8d6; --accent-ink: #07161c; --ok: #5cc98a; --warn: #e5a54a; color-scheme: dark }
+
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.55 var(--body); }
+  .wrap { max-width: 1120px; margin: 0 auto; padding-block: 28px 48px;
+    padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+    display: grid; gap: 28px; }
+  h1 { font: 800 clamp(26px, 4vw, 36px)/1.1 var(--display); margin: 0; letter-spacing: -.01em; text-wrap: balance; }
+  h2 { font: 600 17px/1.3 var(--display); margin: 0; }
+  p { margin: 0; max-width: 68ch; }
+  .muted { color: var(--muted); }
+  code, .mono { font-family: var(--mono); font-size: .9em; }
+  .sig { display: inline-flex; gap: 4px; flex-wrap: wrap; }
+  .sig span { font: 500 12px var(--mono); border: 1px solid var(--line); border-radius: 3px; padding: 0 5px; color: var(--muted); }
+  header { display: grid; gap: 10px; }
+
+  .steps { display: grid; grid-template-columns: 1.4fr 1fr 1fr; gap: 14px; }
+  .step { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 16px; display: grid; gap: 10px; align-content: start; min-width: 0; }
+  .step .n { font: 500 12px var(--mono); color: var(--accent); letter-spacing: .08em; text-transform: uppercase; }
+  .fields { display: flex; flex-wrap: wrap; gap: 10px; }
+  .fields label { display: grid; gap: 3px; font-size: 12px; color: var(--muted); }
+  input[type=text] { font: 14px var(--mono); padding: 6px 8px; border: 1px solid var(--line); border-radius: 5px; background: var(--bg); color: var(--ink); }
+  #drive { width: 4.5em; text-transform: uppercase; }
+  #out { width: 15em; max-width: 100%; }
+  pre { margin: 0; max-height: 220px; overflow: auto; background: var(--bg); border: 1px solid var(--line); border-radius: 5px; padding: 10px; font: 12px/1.5 var(--mono); }
+  details summary { cursor: pointer; color: var(--muted); font-size: 13px; }
+  details[open] summary { margin-bottom: 8px; }
+
+  button, .btn { font: 600 14px var(--body); border-radius: 6px; padding: 8px 14px; cursor: pointer; border: 1px solid var(--accent); background: var(--accent); color: var(--accent-ink); }
+  button.ghost { background: transparent; color: var(--accent); }
+  button:disabled, .btn[aria-disabled=true] { opacity: .45; cursor: default; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+
+  .results { display: grid; gap: 14px; }
+  .bar { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; }
+  .chip { font: 500 12px var(--mono); padding: 2px 8px; border-radius: 99px; border: 1px solid currentColor; }
+  .chip.demo { color: var(--warn); } .chip.live { color: var(--ok); }
+  .meter { height: 6px; background: var(--line); border-radius: 3px; overflow: hidden; }
+  .meter i { display: block; height: 100%; width: 0; background: var(--accent); transition: width .2s; }
+  #status { font-variant-numeric: tabular-nums; }
+
+  #grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+  .tile { all: unset; cursor: pointer; display: grid; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+  .tile:hover { border-color: var(--accent); }
+  .tile:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .tile .frame { aspect-ratio: 4 / 3; max-width: 100%; background: var(--line); }
+  .tile img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .tile .cap { padding: 6px 8px; display: grid; gap: 1px; font: 12px/1.35 var(--mono); color: var(--muted); font-variant-numeric: tabular-nums; }
+  .tile .cap b { color: var(--ink); font-weight: 500; overflow-wrap: anywhere; }
+  .tile.broken { opacity: .5; }
+  .tile.broken .cap b::after { content: " · damaged"; color: var(--warn); }
+  .empty { padding: 28px; text-align: center; border: 1px dashed var(--line); border-radius: 8px; }
+
+  footer { font-size: 13px; }
+  @media (max-width: 860px) { .steps { grid-template-columns: 1fr; } }
+  @media (prefers-reduced-motion: reduce) { .meter i { transition: none; } }
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>SD Photo Recovery</h1>
+    <p class="muted">Gets back deleted photos from an SD card, including after a quick format. It checks the start of every 512-byte sector for a photo's opening bytes
+      <span class="sig"><span>FF D8 FF</span></span> JPEG and <span class="sig"><span>89 50 4E 47</span></span> PNG,
+      then reads each file through to its last byte. Your card image stays on your computer. Nothing is uploaded.</p>
+  </header>
+
+  <section class="steps" aria-label="How to recover photos">
+    <div class="step">
+      <span class="n">Step 1 · Copy the card</span>
+      <p>Stop using the card first: every new photo can overwrite a deleted one. Then copy the whole card, deleted space included, into one image file.</p>
+      <div class="fields">
+        <label for="drive">Card drive letter<input id="drive" type="text" value="E" maxlength="1" autocomplete="off"></label>
+        <label for="out">Save image to (another drive)<input id="out" type="text" value="D:\sdcard.img" autocomplete="off"></label>
+      </div>
+      <p id="drive-err" class="muted" hidden></p>
+      <div class="row">
+        <button id="copy">Copy Windows command</button>
+        <span id="copied" class="muted" aria-live="polite"></span>
+      </div>
+      <p class="muted" style="font-size:13px">Paste it into <b>PowerShell run as Administrator</b> and press Enter.</p>
+      <details>
+        <summary>Show the command</summary>
+        <pre id="ps-out" tabindex="0"></pre>
+      </details>
+      <details>
+        <summary>On macOS or Linux</summary>
+        <pre tabindex="0"># macOS: find the card with  diskutil list
+sudo dd if=/dev/rdiskN of=~/sdcard.img bs=4m
+
+# Linux: find the card with  lsblk
+sudo dd if=/dev/sdX of=~/sdcard.img bs=4M status=progress</pre>
+      </details>
+    </div>
+    <div class="step">
+      <span class="n">Step 2 · Scan the image</span>
+      <p>Open the <code>.img</code> file you just made. A 32 GB card takes a few minutes. Photos show up below as they are found.</p>
+      <div class="row">
+        <label class="btn" id="open-label" for="file">Open card image…</label>
+        <input id="file" type="file" hidden>
+      </div>
+    </div>
+    <div class="step">
+      <span class="n">Step 3 · Save your photos</span>
+      <p>Click any photo to save it, or save them all as ZIP files of up to 256 MB each. Faded photos are damaged: part of the file was overwritten or split up.</p>
+      <div class="row"><button id="save-all" disabled>Save all as ZIP</button></div>
+    </div>
+  </section>
+
+  <section class="results" aria-label="Recovered photos">
+    <div class="bar">
+      <div class="row"><h2 id="src-name">Recovered photos</h2><span id="src-chip" class="chip demo">demo</span></div>
+      <span id="status" class="muted" aria-live="polite">Preparing demo…</span>
+    </div>
+    <div class="meter" aria-hidden="true"><i id="meter"></i></div>
+    <div id="grid"></div>
+  </section>
+
+  <footer class="muted">
+    <p>Recovers JPEG and PNG files stored in one continuous piece, which covers most photos from cameras and phones. It does not recover RAW files (CR2, NEF, ARW), HEIC or videos.</p>
+  </footer>
+</div>
+
+<script type="text/plain" id="ps-template">& {
+$Drive = '__DRIVE__'; $Out = '__OUT__'
+$ErrorActionPreference = 'Stop'
+if ([IO.Path]::GetFullPath($Out).ToUpper().StartsWith("${Drive}:")) { throw "Save the image to a different drive than ${Drive}:, or it will overwrite the photos." }
+if (-not ('RawVolume' -as [type])) {
+Add-Type @'
+using System; using System.IO; using System.Runtime.InteropServices; using Microsoft.Win32.SafeHandles;
+public static class RawVolume {
+  [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+  static extern SafeFileHandle CreateFile(string name, uint access, uint share, IntPtr sa, uint disp, uint flags, IntPtr tmpl);
+  public static FileStream Open(string path) {
+    SafeFileHandle h = CreateFile(path, 0x80000000, 3, IntPtr.Zero, 3, 0, IntPtr.Zero);
+    if (h.IsInvalid) throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error(), "Cannot open " + path + " (run PowerShell as Administrator)");
+    return new FileStream(h, FileAccess.Read, 4096);
+  }
+}
+'@
+}
+$size = [math]::Max(1, [double](Get-Volume -DriveLetter $Drive).Size)
+$src = [RawVolume]::Open("\\.\${Drive}:")
+$dst = [IO.File]::Create([IO.Path]::GetFullPath($Out))
+$buf = New-Object byte[] (4MB)
+$total = 0L
+try {
+  while (($n = $src.Read($buf, 0, $buf.Length)) -gt 0) {
+    $dst.Write($buf, 0, $n); $total += $n
+    if ($total % 64MB -eq 0) { Write-Progress -Activity "Copying ${Drive}:" -Status "$([math]::Round($total/1MB)) MB" -PercentComplete ([math]::Min(100, 100 * $total / $size)) }
+  }
+} catch [IO.IOException] {
+  Write-Warning "Copy stopped at $total bytes ($($_.Exception.Message)). The part copied so far can still be scanned."
+} finally { $src.Dispose(); $dst.Dispose() }
+Write-Host "Saved $([math]::Round($total/1MB)) MB to $Out. Open it in SD Photo Recovery."
+}
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="carve.js"></script>
+<script>
+const $ = id => document.getElementById(id);
+const status = t => { $('status').textContent = t; };
+const mb = n => (n / 1048576).toFixed(1) + ' MB';
+let found = [], scanning = false;
+
+// ---- Step 1: build the paste-ready PowerShell command from the two fields
+function buildScript() {
+  const drive = $('drive').value.trim().toUpperCase();
+  const out = $('out').value.trim();
+  const err = !/^[A-Z]$/.test(drive) ? 'Enter a single drive letter, like E.'
+    : !out ? 'Enter where to save the image, like D:\\sdcard.img.'
+    : out.toUpperCase().startsWith(drive + ':') ? `Save the image to a different drive than ${drive}:, or it will overwrite the photos.` : '';
+  $('drive-err').hidden = !err; $('drive-err').textContent = err; $('copy').disabled = !!err;
+  $('ps-out').textContent = $('ps-template').textContent
+    .replace('__DRIVE__', () => drive).replace('__OUT__', () => out.replace(/'/g, "''"));
+}
+$('drive').oninput = $('out').oninput = buildScript;
+buildScript();
+
+$('copy').onclick = () => {
+  navigator.clipboard.writeText($('ps-out').textContent)
+    .then(() => { $('copied').textContent = 'Copied. Paste it into PowerShell as Administrator.'; })
+    .catch(() => {
+      $('ps-out').closest('details').open = true;
+      getSelection().selectAllChildren($('ps-out'));
+      $('copied').textContent = 'Press Ctrl+C to copy the selected command.';
+    });
+};
+
+// ---- Saving: the hosted viewer's save prompt, or a plain download when opened as a local file
+const dlReady = window.claude?.use ? window.claude.use('downloads') : Promise.resolve(null);
+async function saveFile(name, blob) {
+  const dl = await dlReady;
+  if (dl) {
+    try { await dl.save({ filename: name, data: blob }); return true; }
+    catch (e) {
+      if (e.code === 'declined') status(`Didn't save ${name}.`);
+      else if (e.code === 'rate_limited') status('A save prompt is already open. Finish it, then try again.');
+      else status(`Couldn't save ${name} here (${e.code}).`);
+      return false;
+    }
+  }
+  if (window.claude) { status('Saving files is not available in this view. Open the page in a browser on claude.ai.'); return false; }
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = name; a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 60000);
+  return true;
+}
+
+$('save-all').onclick = async () => {
+  const PART = 256 << 20;   // ZIPs are built in memory, so cap each part
+  $('save-all').disabled = true;
+  for (let i = 0, part = 1; i < found.length; part++) {
+    const zip = new JSZip(); let bytes = 0;
+    while (i < found.length && (bytes === 0 || bytes + found[i].blob.size <= PART)) {
+      zip.file(found[i].name, found[i].blob); bytes += found[i].blob.size; i++;
+    }
+    status(`Building ZIP ${part} (${mb(bytes)})…`);
+    const blob = await zip.generateAsync({ type: 'blob', compression: 'STORE' });  // photos are already compressed
+    if (!await saveFile(`recovered-photos-${part}.zip`, blob)) break;
+    status(`Saved recovered-photos-${part}.zip. ${found.length - i} photos left.`);
+  }
+  $('save-all').disabled = false;
+};
+
+// ---- Step 2: scan
+function addTile(f, blob, name) {
+  const url = URL.createObjectURL(blob);
+  const b = document.createElement('button');
+  b.className = 'tile'; b.type = 'button'; b.title = `Save ${name}`;
+  b.innerHTML = `<span class="frame"><img loading="lazy" alt=""></span>
+    <span class="cap"><b></b><span>${(blob.size / 1024).toFixed(0)} KB · sector ${(f.start / 512).toLocaleString()}</span></span>`;
+  b.querySelector('img').src = url;
+  b.querySelector('img').alt = name;
+  b.querySelector('b').textContent = name;
+  b.querySelector('img').onerror = () => b.classList.add('broken');
+  b.onclick = () => saveFile(name, blob);
+  $('grid').append(b);
+}
+
+async function scan(file, isDemo) {
+  if (scanning) return;
+  scanning = true; found = [];
+  $('grid').replaceChildren(); $('save-all').disabled = true; $('file').disabled = true;
+  $('open-label').setAttribute('aria-disabled', 'true');
+  $('src-name').textContent = isDemo ? 'Recovered photos' : file.name;
+  $('src-chip').className = 'chip ' + (isDemo ? 'demo' : 'live');
+  $('src-chip').textContent = isDemo ? 'demo' : mb(file.size);
+  const read = async (o, n) => new Uint8Array(await file.slice(o, o + n).arrayBuffer());
+  const t0 = performance.now();
+  try {
+    for await (const f of carve(read, file.size, (p, s) => {
+      $('meter').style.width = (100 * p / s) + '%';
+      status(`Scanning ${mb(p)} of ${mb(s)} · ${found.length} found`);
+    })) {
+      const name = `recovered_${String(found.length + 1).padStart(5, '0')}.${f.ext}`;
+      const blob = file.slice(f.start, f.end, f.type);   // a view into the image, not a copy
+      found.push({ name, blob });
+      addTile(f, blob, name);
+    }
+    const secs = ((performance.now() - t0) / 1000).toFixed(1);
+    status(isDemo
+      ? `Demo: ${found.length} photos recovered from a sample card image with random data around them. Open your own image to replace them.`
+      : `Done in ${secs} s · ${found.length} photos found`);
+    if (!found.length) $('grid').innerHTML = '<p class="empty muted">No JPEG or PNG photos were found in this image. Check that you copied the whole card, not just one file from it.</p>';
+  } catch (err) {
+    status(`The scan stopped: ${err.message}. Try copying the card again.`);
+  }
+  scanning = false;
+  $('file').disabled = false; $('open-label').removeAttribute('aria-disabled');
+  $('save-all').disabled = !found.length;
+}
+
+$('file').onchange = e => { const f = e.target.files[0]; if (f) scan(f, false); e.target.value = ''; };
+
+// ---- Demo: build a tiny card image with photos planted among random bytes, then scan it for real
+async function demoImage() {
+  const c = document.createElement('canvas'); c.width = 480; c.height = 360;
+  const g = c.getContext('2d');
+  const parts = []; let len = 0;
+  const push = b => { parts.push(b); len += b.size; };
+  const junk = n => { const a = new Uint8Array(n); crypto.getRandomValues(a); return new Blob([a]); };
+  const pad = () => { const n = (512 - len % 512) % 512; if (n) push(new Blob([new Uint8Array(n)])); };
+  const scenes = [['#f5b36b', '#5b86a8', '#2f4a3a'], ['#9fd0e8', '#3d78a8', '#6b8f3f'], ['#f2d0a4', '#c4666a', '#3b2f4a'],
+                  ['#cfe3ee', '#7aa2c4', '#45607a'], ['#ffd27a', '#e08a4c', '#4a3a2c'], ['#bfe0d2', '#4f9c8a', '#22433d']];
+  push(junk(4096)); pad();
+  for (let i = 0; i < scenes.length; i++) {
+    const [sky1, sky2, land] = scenes[i];
+    const sky = g.createLinearGradient(0, 0, 0, 360); sky.addColorStop(0, sky1); sky.addColorStop(1, sky2);
+    g.fillStyle = sky; g.fillRect(0, 0, 480, 360);
+    g.fillStyle = 'rgba(255,255,255,.85)'; g.beginPath(); g.arc(120 + i * 50, 110, 34, 0, 7); g.fill();
+    g.fillStyle = land; g.beginPath(); g.moveTo(0, 360);
+    for (let x = 0; x <= 480; x += 40) g.lineTo(x, 250 + 40 * Math.sin(x / 70 + i));
+    g.lineTo(480, 360); g.fill();
+    g.fillStyle = 'rgba(0,0,0,.55)'; g.fillRect(0, 326, 480, 34);
+    g.fillStyle = '#fff'; g.font = '16px monospace'; g.fillText(`IMG_${1040 + i}.${i % 3 === 2 ? 'PNG' : 'JPG'}`, 12, 349);
+    push(await new Promise(r => c.toBlob(r, i % 3 === 2 ? 'image/png' : 'image/jpeg', 0.88)));
+    push(junk(2500 + i * 900)); pad();
+  }
+  return new File(parts, 'demo-card.img');
+}
+demoImage().then(f => scan(f, true));
+</script>
