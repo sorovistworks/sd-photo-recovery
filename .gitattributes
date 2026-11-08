@@ -1,0 +1,2 @@
+# Keep Windows line endings in the batch file exactly as committed; cmd.exe needs CRLF.
+*.bat -text

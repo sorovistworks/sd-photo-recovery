@@ -33,5 +33,19 @@ const img = Buffer.concat(parts);
     assert.strictEqual(f.start, expected[i].start);
     assert.ok(img.subarray(f.start, f.end).equals(expected[i].data), `file ${i} bytes differ`);
   });
-  console.log(`OK: carved ${got.length} photos (${real.length} real Windows images + 1 synthetic) byte-exact`);
+  console.log(`OK: carve.js recovered ${got.length} photos (${real.length} real Windows images + 1 synthetic) byte-exact`);
+
+  // Same image through RecoverPhotos.bat's C# carver (Windows only)
+  if (process.platform !== 'win32') return;
+  const os = require('os'), { execFileSync } = require('child_process');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'carve-')), imgPath = path.join(dir, 'card.img'), out = path.join(dir, 'out');
+  fs.writeFileSync(imgPath, img); fs.mkdirSync(out);
+  const bat = path.join(__dirname, 'RecoverPhotos.bat');
+  execFileSync('powershell', ['-NoProfile', '-Command',
+    `$env:RECOVER_PHOTOS_TEST=1; $s=[IO.File]::ReadAllText('${bat}'); iex ($s.Substring($s.IndexOf('#'+'PS-START'))); [void][Carver]::Run('${imgPath}', ${img.length}, '${out}')`]);
+  const files = fs.readdirSync(out).sort();
+  assert.strictEqual(files.length, expected.length, `bat found ${files.length}, expected ${expected.length}`);
+  files.forEach((f, i) => assert.ok(fs.readFileSync(path.join(out, f)).equals(expected[i].data), `bat file ${f} bytes differ`));
+  fs.rmSync(dir, { recursive: true });
+  console.log(`OK: RecoverPhotos.bat recovered ${files.length} photos byte-exact`);
 })().catch(e => { console.error(e); process.exit(1); });
